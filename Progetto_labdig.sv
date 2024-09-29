@@ -1,22 +1,25 @@
 module Progetto_labdig #(
     parameter CYCLE_LIM = 100, // error threshold for the interrupt to be active
-    parameter IN_DATA_WIDTH = 100 // number of input data
+    parameter IN_DATA_WIDTH = 100, // number of input scrubs
+    parameter ADDR_WIDTH = 1,  // Just 2 internal registers
+	 parameter DATA_WIDTH = 32 // 32-bit data width (TO BE DEFINED, ASSUMING A MAXIMUM TIME BETWEEN BIT FLIP OF 2^32-1 cycles
+	 // OSS.: the number of bits of DATA_WIDTH is related to the #bits of the counter (MAX_CNT below)
 )(
     input   logic                  clk_i,
     input   logic                  rstn_i,
-    input   logic [IN_DATA_WIDTH-1:0]    scrub_i,
-    // output  logic    		        interr_o,
-	 // output  logic [15:0]           freq_o
-	 REG_BUS.out bus_if
+    input   logic [IN_DATA_WIDTH-1:0]    scrub_i
 );
 
 	// REGISTER INTERFACE CONTROL
-   // Parameters
-   parameter ADDR_WIDTH = 1;  // Just 2 internal registers
-	parameter DATA_WIDTH = 32; // 32-bit data width (TO BE DEFINED, ASSUMING A MAXIMUM TIME BETWEEN BIT FLIP OF 2^32-1 cycles
-	// OSS.: the number of bits of DATA_WIDTH is related to the #bits of the counter (MAX_CNT below)
-  // Internal register array (for simplicity, 16 registers)
-  
+    // Instantiate the interface
+    REG_BUS #(
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .DATA_WIDTH(DATA_WIDTH)
+    ) bus_if (
+        .clk_i(clk_i)
+    );
+   
+	// Internal register array (for simplicity, 16 registers)
   logic [DATA_WIDTH-1:0] registers [0:(1<<ADDR_WIDTH)-1];
 
   // Internal signals
@@ -35,7 +38,7 @@ module Progetto_labdig #(
       // Check if a valid transaction is occurring
       if (bus_if.valid) begin
           // Handle Read Transaction
-          if (bus_if.addr < (1<<ADDR_WIDTH)) begin
+          if (bus_if.addr < (1 << ADDR_WIDTH)) begin
             // Return the data from the selected register
             bus_if.rdata <= registers[bus_if.addr];
             ready_reg <= 1;  // Indicate read success
@@ -52,16 +55,16 @@ module Progetto_labdig #(
   assign bus_if.ready = ready_reg;
   assign bus_if.error = error_reg;
   
-	  
-  
+
   	// INTERNAL REGISTER
 	logic interr_d, interr_q;
 	logic [DATA_WIDTH-1:0] cyclesxbf_d, cyclesxbf_q;
 	
+	
 	always_ff @(posedge clk_i, negedge rstn_i) begin
       if(~rstn_i) begin
             interr_q <= '0;
-				cyclesxbf_q[i] = {DATA_WIDTH{1'b0}};
+				cyclesxbf_q = 0;
       end else begin
             interr_q <= interr_d;
 				cyclesxbf_q <= cyclesxbf_d;
@@ -116,7 +119,8 @@ module Progetto_labdig #(
 		end
 	end
 	
-	logic flag_in <= |input_q; // ASSUMING THAT MULTIPLE BF IN THE SAME CYCLE ARE COUNTED AS A SINGLE ONE
+	logic flag_in;
+	assign flag_in = |input_q; // ASSUMING THAT MULTIPLE BF IN THE SAME CYCLE ARE COUNTED AS A SINGLE ONE
 	
 	// FSM
 	
@@ -135,7 +139,6 @@ module Progetto_labdig #(
 
 	logic [DATA_WIDTH-1:0] temp_dividend;
     logic [DATA_WIDTH-1:0] temp_quotient;
-	 integer i;
 	 
 	 // FSM ns computation
     always_comb begin
@@ -186,6 +189,15 @@ module Progetto_labdig #(
 						cyclesxbf_d = cyclesxbf_q;
 					end
 
+				end
+			default:
+				begin
+					cyclesxbf_d = cyclesxbf_q;
+					interr_d = 0;
+					clear_cycles = 0;
+					clear_bf = 0;
+					en_cycles = 0;
+					en_bf = 0;
 				end
 			endcase
 	 	end
