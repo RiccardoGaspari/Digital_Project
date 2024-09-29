@@ -23,8 +23,8 @@ module Progetto_labdig #(
   logic ready_reg, error_reg;
 
   // Reset logic and initialization
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
+  always_ff @(posedge clk_i or negedge rstn_i) begin
+    if (!rstn_i) begin
       ready_reg <= 0;
       error_reg <= 0;
       bus_if.rdata <= {DATA_WIDTH{1'b0}};
@@ -120,10 +120,10 @@ module Progetto_labdig #(
 	
 	// FSM
 	
-    localparam int unsigned NUM_STATES = 3;
+    localparam int unsigned NUM_STATES = 2;
     localparam int unsigned STATES_BITS = $clog2(NUM_STATES);
 
-    typedef enum logic [STATES_BITS-1:0] {IDLE, ELAB, READY} state_t;
+    typedef enum logic [STATES_BITS-1:0] {IDLE, ELAB} state_t;
     state_t cs, ns;
 
     always_ff @(posedge clk_i, negedge rstn_i) begin
@@ -133,41 +133,34 @@ module Progetto_labdig #(
             cs <= ns;
     end
 
-	 logic [DATA_WIDTH-1:0] temp_dividend;
+	logic [DATA_WIDTH-1:0] temp_dividend;
     logic [DATA_WIDTH-1:0] temp_quotient;
 	 integer i;
 	 
 	 // FSM ns computation
     always_comb begin
-        ns = IDLE;
-
         case(cs)
         IDLE:
             begin
 					if(flag_in)
 						ns = ELAB;
+					else
+						ns = cs;
             end
         ELAB:
             begin
 					if(bus_if.valid)
-						ns = READY;
+						ns = IDLE;
 					else
 					ns = cs;
             end
-		  READY:
-				begin
-					ns = IDLE;
-				end
         endcase
     end
 	 
 	 // FSM output and counters computation
 	 always_comb begin
-	 
-			i = 0;
-			temp_quotient = 0;
-			temp_dividend = 0;
-			cyclesxbf_d = 0;
+
+			cyclesxbf_d = cyclesxbf_q;
 			interr_d = 0;
 			clear_cycles = 0;
 			clear_bf = 0;
@@ -178,31 +171,23 @@ module Progetto_labdig #(
 			ELAB:
 				begin
 					en_cycles = 1;
-					if(flag_in)
-						en_bf = 1;
 
-					if(bus_if.valid) begin
-						// Compute the division
-						temp_dividend = cyclesxbf_q;
-						temp_quotient = 0;
-						for (i = DATA_WIDTH-1; i >= 0; i = i - 1) begin
-							 if (temp_dividend >= (count_bf << i)) begin
-								 temp_dividend = temp_dividend - (count_bf << i);
-								 temp_quotient = temp_quotient | (1 << i);
-							 end
+					if(flag_in) begin
+						en_bf = 1;
+						clear_cycles = 1;
+
+						if (count_bf != 0) begin  // Ensure no division by zero
+							cyclesxbf_d = ((cyclesxbf_q * (count_bf - 1) + count_cycles) + count_bf - 1) / count_bf;
+						end else begin
+							cyclesxbf_d = count_cycles;  // Handle case where count_bf is 0
 						end
-						
-						// Rounding logic
-						if (temp_dividend = (count_bf >> 1)) begin
-							cyclesxbf_d = temp_quotient + 1;
-						end
+
+					end else begin
+						cyclesxbf_d = cyclesxbf_q;
 					end
+
 				end
-			READY:
-				begin
-					clear_bf = 1;
-					clear_cycles = 1;
-				end
-	 end
+			endcase
+	 	end
 
 endmodule
