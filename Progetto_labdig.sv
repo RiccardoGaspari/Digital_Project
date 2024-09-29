@@ -1,23 +1,17 @@
 module Progetto_labdig #(
     parameter CYCLE_LIM = 100, // error threshold for the interrupt to be active
     parameter IN_DATA_WIDTH = 100, // number of input scrubs
-    parameter ADDR_WIDTH = 1,  // Just 2 internal registers
-	 parameter DATA_WIDTH = 32 // 32-bit data width (TO BE DEFINED, ASSUMING A MAXIMUM TIME BETWEEN BIT FLIP OF 2^32-1 cycles
+    parameter ADDR_WIDTH = 1,  // Just 2 internal registers // To be the same as REG_BUS
+	 parameter DATA_WIDTH = 32 // 32-bit data width (TO BE DEFINED, ASSUMING A MAXIMUM TIME BETWEEN BIT FLIP OF 2^32-1 cycles // To be the same as REG_BUS
 	 // OSS.: the number of bits of DATA_WIDTH is related to the #bits of the counter (MAX_CNT below)
 )(
     input   logic                  clk_i,
     input   logic                  rstn_i,
-    input   logic [IN_DATA_WIDTH-1:0]    scrub_i
+    input   logic [IN_DATA_WIDTH-1:0]    scrub_i,
+	 REG_BUS.in bus_if
 );
 
 	// REGISTER INTERFACE CONTROL
-    // Instantiate the interface
-    REG_BUS #(
-        .ADDR_WIDTH(ADDR_WIDTH),
-        .DATA_WIDTH(DATA_WIDTH)
-    ) bus_if (
-        .clk_i(clk_i)
-    );
    
 	// Internal register array (for simplicity, 16 registers)
   logic [DATA_WIDTH-1:0] registers [0:(1<<ADDR_WIDTH)-1];
