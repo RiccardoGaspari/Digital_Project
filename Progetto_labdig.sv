@@ -1,17 +1,23 @@
 module Progetto_labdig #(
     parameter CYCLE_LIM = 100, 	//Frequency threshold for the interrupt to be active
-    parameter IN_DATA_WIDTH = 100 	//Number of input data
+    parameter IN_DATA_WIDTH = 100, 	//Number of input data
 	parameter ADDR_WIDTH = 2,
 	parameter DATA_WIDTH = 32
 )(
     input   logic           clk_i,
     input   logic           rstn_i,
-    input   logic [IN_DATA-1:0] value_i,
+    input   logic [IN_DATA_WIDTH-1:0] value_i,
     output  logic    		 interr_o,
-	output  logic [15:0]    value_o
+	 REG_BUS.in bus_if
 );	
 
 	//Register Interface
+
+	//Register interface addresses assignment
+	assign registers[0] = {{DATA_WIDTH-1{1'b0}}, interr_q};
+	assign registers[1] = cyclesxbf_q;
+	assign registers[2] = bf_density_q;
+	assign registers[3] = 0;
 
 	//Internal register array (for simplicity, 16 registers)
   	logic [DATA_WIDTH-1:0] registers [0:(1<<ADDR_WIDTH)-1];
@@ -28,23 +34,26 @@ module Progetto_labdig #(
      		ready_reg <= 0;
       		error_reg <= 0;
 
-      		//Check if a valid transaction is occurring
-      		if (bus_if.valid) 
-			begin
-        	//Handle Read Transaction
-          	if (bus_if.addr < (1 << ADDR_WIDTH)) 
-			begin
-            	//Return the data from the selected register
-            	bus_if.rdata <= registers[bus_if.addr];
-            	ready_reg <= 1;  //Indicate read success
-        	end else begin
-            	//Address out of range
-            	error_reg <= 1;
-            	bus_if.rdata <= 32'hDEADBEEF; //Arbitrary error value
-          	end
-      		end
+      	// Check if a valid transaction is occurring
+		// OBS.: the output is considered valid iff valid and ready are both up at the same time (valid has to be up at least 2 clock cycles)
+
+      	if (bus_if.valid) 
+		begin
+        // Handle Read Transaction
+			if(cs == OUT) begin
+				if (bus_if.addr < (1 << ADDR_WIDTH)) begin
+				// Return the data from the selected register
+				bus_if.rdata <= registers[bus_if.addr];
+				ready_reg <= 1;  // Indicate read success
+				end else begin
+				// Address out of range
+				error_reg <= 1;
+				bus_if.rdata <= 32'hDEADBEEF; // Arbitrary error value
+				end
+			end
+      	end
     	end
- 	 end
+ 	end
 
   	//Assign output signals to interface
   	assign bus_if.ready = ready_reg;
@@ -71,7 +80,7 @@ module Progetto_labdig #(
 	
 
 	//Counter for single glitch (+1 for avery cicle where there is at least one input at 1)
-	logic [32:0] cnt_bf_d, cnt_bf_q;
+	logic [31:0] cnt_bf_d, cnt_bf_q;
 
 	always_ff @(posedge clk_i or negedge rstn_i) 
 	begin
@@ -84,7 +93,7 @@ module Progetto_labdig #(
 
 
 	//Counter for the actual number of glitch 
-	logic [32:0] cnt_tot_bf_d, cnt_tot_bf_q;
+	logic [31:0] cnt_tot_bf_d, cnt_tot_bf_q;
 
 	always_ff @(posedge clk_i or negedge rstn_i) 
 	begin
@@ -104,7 +113,7 @@ module Progetto_labdig #(
 
 
 	//Input Reg
-	logic[IN_DATA-1:0] input_q;	
+	logic[IN_DATA_WIDTH-1:0] input_q;	
 
 	always_ff @(posedge clk_i or negedge rstn_i) 
 	begin
@@ -158,9 +167,9 @@ module Progetto_labdig #(
 
 
 	//FSM
-	localparam int unsigned NUM_STATES = 2;
+	localparam int unsigned NUM_STATES = 3;
     localparam int unsigned STATES_BITS = $clog2(NUM_STATES);
-	typedef enum logic [STATES_BITS-1:0] {IDLE, ELAB} state_t;
+	typedef enum logic [STATES_BITS-1:0] {IDLE, ELAB, OUT} state_t;
     state_t cs, ns;
 	
 	always_ff @(posedge clk_i or negedge rstn_i) 
@@ -188,7 +197,7 @@ module Progetto_labdig #(
 				if(bus_if.valid)
 					ns = IDLE;
 				else
-				ns = cs;
+					ns = cs;
             end
 		OUT: 
 			begin
@@ -208,8 +217,6 @@ module Progetto_labdig #(
 		cyclesxbf_d = cyclesxbf_q;
 		bf_density_d = bf_density_q;
 		interr_d = interr_q;
-		//FSM
-		ns = cs;
 
 
 		case(cs)
@@ -221,9 +228,9 @@ module Progetto_labdig #(
 					//Starting the total cicles counter
 					clear_tot = '0;
 					//Starting the counter of times we had at least one bf
-					cnt_bf_d++; 
+					cnt_bf_d = cnt_bf_q + 1'b1; 
 					//Starting the counter of actual n of bits
-					for (logic i = 0; i < IN_DATA_WIDTH; i++) 
+					for (int i = 0; i < IN_DATA_WIDTH; i++) 
 					begin
     					cnt_tot_bf_d += (input_q[i] != 0) ? 1 : 0;
 					end
@@ -236,15 +243,15 @@ module Progetto_labdig #(
 
 				if (flag_in)
 				begin
-					cnt_bf_d++; 								//Counts the n times we had any bf 
+					cnt_bf_d = cnt_bf_q + 1'b1; 								//Counts the n times we had any bf 
 
-					for (logic i = 0; i < IN_DATA_WIDTH; i++) 
+					for (int i = 0; i < IN_DATA_WIDTH; i++) 
 					begin
     					cnt_tot_bf_d += (input_q[i] != 0) ? 1 : 0;
 					end
 					
 					//Cycle x BF
-					cyclesxbf_d = (cnt_bf_q++) / count_q;  //(bitflip totali + singolo bitflip eventuale a "1")/n tot cicli
+					cyclesxbf_d = (cnt_bf_q + 1'b1) / count_tot;  //(bitflip totali + singolo bitflip eventuale a "1")/n tot cicli
 					//Density for BF cicles 
 					bf_density_d = cnt_tot_bf_d / cnt_bf_q;
 
