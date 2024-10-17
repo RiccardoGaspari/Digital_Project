@@ -12,7 +12,7 @@ logic clk_i, rstn_i, interr_o;
 logic [IN_DATA_WIDTH-1:0] scrub_i;
 
 logic [DATA_WIDTH-1:0] read_data;
-int i;
+int i, j;
 
 // Instantiate the REG_BUS interface
 REG_BUS #(
@@ -71,25 +71,68 @@ initial begin
   bus_if.write = 0;
 
   // Reset the DUT
-  #10;
+  @(negedge clk_i);
   rstn_i = 1;
 
-  // Stimulate input scrubs with bit flips
-  for (i = 0; i < IN_DATA_WIDTH; i++) begin
-    @(negedge clk_i);
-    scrub_i = 0;
-    scrub_i[i] = 1;
-  end
+  // ADDRESS MAPPING
+  // registers[0] = {{DATA_WIDTH-1{1'b0}}, interr_q};
+  // registers[1] = cyclesxbf_q;
+  // registers[2] = bfdensity_q;
+  // registers[3] = 0;
 
+  // FIRST ANALYSIS: random inputs
   for (i = 0; i < 15; i++) begin
     @(negedge clk_i);
-    scrub_i = $urandom; // Assign a random value to scrub_i
+    for (j = 0; j < IN_DATA_WIDTH; j++) begin
+	scrub_i[j] = $urandom % 2; // Randomize each bit of scrub_i
+    end
   end
 
   // Read data from the DUT using the read task
-  read_register(2, read_data);  // Example read operation
+  read_register(2, read_data);
   $display("Register value = %h", read_data);
+  @(negedge clk_i);
 
+  // SECOND ANALYSIS: checking the interrupt threshold (set to 100Tck)
+  scrub_i = { {(IN_DATA_WIDTH-1){1'b0}}, 1'b1 };
+  @(negedge clk_i);
+  scrub_i = 0;
+  repeat (98) @(negedge clk_i);
+  scrub_i = { {(IN_DATA_WIDTH-1){1'b0}}, 1'b1 };
+  @(negedge clk_i);
+  scrub_i = 0;
+  // If correctly set, the interrupt should be set to 1
+  // Read data from the DUT using the read task
+  read_register(0, read_data);
+  $display("Register value = %h", read_data);
+  @(negedge clk_i);
+
+  // COUNTEREXAMPLE
+  scrub_i = { {(IN_DATA_WIDTH-1){1'b0}}, 1'b1 };
+  @(negedge clk_i);
+  scrub_i = 0;
+  repeat (99) @(negedge clk_i);
+  scrub_i = { {(IN_DATA_WIDTH-1){1'b0}}, 1'b1 };
+  @(negedge clk_i);
+  scrub_i = 0;
+  // If correctly set, the interrupt should stay at 0
+  // Read data from the DUT using the read task
+  read_register(0, read_data);
+  $display("Register value = %h", read_data);
+  @(negedge clk_i);
+
+  // TESTING CYCLESXBF
+  scrub_i = { {(IN_DATA_WIDTH-1){1'b0}}, 1'b1 };
+  @(negedge clk_i);
+  scrub_i = 0;
+  repeat (96) @(negedge clk_i);
+  scrub_i = { {(IN_DATA_WIDTH-1){1'b0}}, 1'b1 };
+  @(negedge clk_i);
+  scrub_i = 0;
+  // If correctly set, the interrupt should stay at 0
+  // Read data from the DUT using the read task
+  read_register(1, read_data);
+  $display("Register value = %h", read_data);
   @(negedge clk_i);
 
   $stop;
@@ -97,8 +140,8 @@ end
 
 // Monitor signals
 initial begin
-  $monitor("Time = %0t, scrub_i = %b, interr_o = %b, bus_if.addr = %0d, bus_if.rdata = %h, bus_if.valid = %b, bus_if.ready = %b",
-            $time, scrub_i, interr_o, bus_if.addr, bus_if.rdata, bus_if.valid, bus_if.ready);
+  $monitor("Time = %0t, scrub_i = %b, interr_o = %b",
+            $time, scrub_i, interr_o);
 end
 
 endmodule
