@@ -26,7 +26,7 @@ module counter
 		if (clear_i) begin
 			count_d = '0;
 		end else if (enable_i) begin
-			count_d = count_q + 1;
+			count_d = count_q + { {WIDTH-1{1'b0}}, 1'b1 };
 		end
 	end
 	

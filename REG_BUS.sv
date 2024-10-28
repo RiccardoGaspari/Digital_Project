@@ -1,6 +1,6 @@
 interface REG_BUS #(
   /// The width of the address.
-  parameter int ADDR_WIDTH = 1,
+  parameter int ADDR_WIDTH = 2,
   /// The width of the data.
   parameter int DATA_WIDTH = 32
 )(

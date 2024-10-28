@@ -24,7 +24,7 @@ REG_BUS #(
 
 // Instantiate the DUT
 Progetto_labdig #(
-  .CYCLE_LIM(CYCLE_LIM),
+  .INTERR_THRESHOLD(CYCLE_LIM),
   .IN_DATA_WIDTH(IN_DATA_WIDTH)
 ) DUT (
   .clk_i(clk_i),
@@ -90,7 +90,7 @@ initial begin
 
   // Read data from the DUT using the read task
   read_register(2, read_data);
-  $display("Register value = %h", read_data);
+  $display("1st Register value = %h", read_data);
   @(negedge clk_i);
 
   // SECOND ANALYSIS: checking the interrupt threshold (set to 100Tck)
@@ -104,7 +104,7 @@ initial begin
   // If correctly set, the interrupt should be set to 1
   // Read data from the DUT using the read task
   read_register(0, read_data);
-  $display("Register value = %h", read_data);
+  $display("2nd Register value = %h", read_data);
   @(negedge clk_i);
 
   // COUNTEREXAMPLE
@@ -118,7 +118,7 @@ initial begin
   // If correctly set, the interrupt should stay at 0
   // Read data from the DUT using the read task
   read_register(0, read_data);
-  $display("Register value = %h", read_data);
+  $display("3rd Register value = %h", read_data);
   @(negedge clk_i);
 
   // TESTING CYCLESXBF
@@ -132,7 +132,7 @@ initial begin
   // If correctly set, the interrupt should stay at 0
   // Read data from the DUT using the read task
   read_register(1, read_data);
-  $display("Register value = %h", read_data);
+  $display("4th Register value = %h", read_data);
   @(negedge clk_i);
 
   $stop;
